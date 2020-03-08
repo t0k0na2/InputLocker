@@ -23,8 +23,8 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // メイン ウィンドウ ク
 
 bool inputLocked_ = false;
 NOTIFYICONDATA notifyIconData_;
-int beepCounter_ = 0;
-const std::array<DWORD, 8> BEEP_SCALES = {440, 494, 554, 587, 659, 740, 830, 880};
+HICON hLockIcon_;
+HICON hUnlockIcon_;
 
 // このコード モジュールに含まれる関数の宣言を転送します:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -143,13 +143,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_CREATE:
 		{
 			auto cs = reinterpret_cast<CREATESTRUCT*>(lParam);
-			
+			hLockIcon_ = LoadIcon(cs->hInstance, MAKEINTRESOURCE(IDI_LOCK));
+			hUnlockIcon_ = LoadIcon(cs->hInstance, MAKEINTRESOURCE(IDI_UNLOCK));
 			memset(&notifyIconData_, 0, sizeof(notifyIconData_));
 			notifyIconData_.cbSize = sizeof(NOTIFYICONDATA);
 			notifyIconData_.hWnd = hWnd;
 			notifyIconData_.uID = 1;
 			notifyIconData_.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-			notifyIconData_.hIcon = reinterpret_cast<HICON>(GetClassLong(hWnd, GCL_HICON));
+			notifyIconData_.hIcon = hUnlockIcon_;
 			notifyIconData_.uCallbackMessage = WM_NOTIFYICON;
 			_stprintf_s(notifyIconData_.szInfoTitle, TEXT("InputLocker"));
 			LoadString(cs->hInstance, IDS_APP_TITLE, notifyIconData_.szTip, _countof(notifyIconData_.szTip));
@@ -174,10 +175,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 								notifyIconData_.dwInfoFlags = NIIF_INFO;
 								if (inputLocked_)
 								{
+									notifyIconData_.hIcon = hLockIcon_;
 									_stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
 								}
 								else
 								{
+									notifyIconData_.hIcon = hUnlockIcon_;
 									_stprintf_s(notifyIconData_.szInfo, TEXT("入力のロックを解除しました"));
 								}
 								Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);

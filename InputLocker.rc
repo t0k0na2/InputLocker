@@ -36,6 +36,10 @@ IDI_INPUTLOCKER         ICON                    "InputLocker.ico"
 
 IDI_SMALL               ICON                    "small.ico"
 
+IDI_LOCK                ICON                    "lock.ico"
+
+IDI_UNLOCK              ICON                    "unlock.ico"
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
