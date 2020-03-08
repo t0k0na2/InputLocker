@@ -7,8 +7,23 @@
 #include "GlobalHook/GlobalHook.h"
 
 #include <stdio.h>
+#include <shellapi.h>
 
 #define MAX_LOADSTRING 100
+
+// {085417EA-F557-4EDF-A600-D696CD832473}
+#if defined(_DEBUG)
+static const GUID APP_GUID =
+{ 0x85417ea, 0xf557, 0x4edf, { 0xa6, 0x0, 0xd6, 0x96, 0xcd, 0x83, 0x24, 0x73 } };
+#else
+// {08C59895-2343-468C-B157-FF183DE7E99F}
+static const GUID APP_GUID =
+{ 0x8c59895, 0x2343, 0x468c, { 0xb1, 0x57, 0xff, 0x18, 0x3d, 0xe7, 0xe9, 0x9f } };
+#endif
+
+constexpr UINT WM_NOTIFYICON = WM_APP + 0;
+
+
 
 // グローバル変数:
 HINSTANCE hInst;                                // 現在のインターフェイス
@@ -16,6 +31,7 @@ WCHAR szTitle[MAX_LOADSTRING];                  // タイトル バーのテキ�
 WCHAR szWindowClass[MAX_LOADSTRING];            // メイン ウィンドウ クラス名
 
 bool inputLocked_ = false;
+NOTIFYICONDATA notifyIconData_;
 
 // このコード モジュールに含まれる関数の宣言を転送します:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -111,7 +127,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
       return FALSE;
    }
 
-   ShowWindow(hWnd, nCmdShow);
+   ShowWindow(hWnd, SW_HIDE);
    UpdateWindow(hWnd);
 
    return TRUE;
@@ -133,46 +149,80 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
 	case WM_CREATE:
 		{
-			RegisterGlobalHook(hWnd, [](int nCode, WPARAM wParam, LPARAM lParam)->LRESULT
-				{
-					if (nCode < 0)
-					{
-						return CallNextHookEx(NULL, nCode, wParam, lParam);
-					}
+			auto cs = reinterpret_cast<CREATESTRUCT*>(lParam);
+			
+			memset(&notifyIconData_, 0, sizeof(notifyIconData_));
+			notifyIconData_.cbSize = sizeof(NOTIFYICONDATA);
+			notifyIconData_.hWnd = hWnd;
+			notifyIconData_.guidItem = APP_GUID;
+			notifyIconData_.uFlags = NIF_ICON | NIF_MESSAGE | NIF_GUID | NIF_TIP;
+			notifyIconData_.hIcon = reinterpret_cast<HICON>(GetClassLong(hWnd, GCL_HICON));
+			notifyIconData_.uCallbackMessage = WM_NOTIFYICON;
+			LoadString(cs->hInstance, IDS_APP_TITLE, notifyIconData_.szTip, _countof(notifyIconData_.szTip));
+			if (Shell_NotifyIcon(NIM_ADD, &notifyIconData_) == TRUE)
+			{
 
-					auto param = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
-
-					if ((param->vkCode == VK_END) && ((param->flags & LLKHF_UP) != 0))
+				RegisterGlobalHook(hWnd, [](int nCode, WPARAM wParam, LPARAM lParam)->LRESULT
 					{
-						if (GetKeyState(VK_CONTROL) != 0 && GetKeyState(VK_END) != 0 && (GetKeyState(VK_MENU) != 0))
+						if (nCode < 0)
 						{
-							inputLocked_ = !inputLocked_;
+							return CallNextHookEx(NULL, nCode, wParam, lParam);
 						}
-					}
 
-					if (inputLocked_)
-					{
-						return 1;
-					}
+						auto param = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
 
-					return CallNextHookEx(NULL, nCode, wParam, lParam);
-				}, GlobalHookTypes::LowLevelKeyboard);
+						if ((param->vkCode == VK_END) && ((param->flags & LLKHF_UP) != 0))
+						{
+							if (GetKeyState(VK_CONTROL) != 0 && GetKeyState(VK_END) != 0 && (GetKeyState(VK_MENU) != 0))
+							{
+								inputLocked_ = !inputLocked_;
+								notifyIconData_.uFlags |= NIF_INFO;
+								notifyIconData_.dwInfoFlags = NIIF_INFO;
+								if (inputLocked_)
+								{
+									_stprintf_s(notifyIconData_.szInfoTitle, TEXT("InputLocker"));
+									_stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
+								}
+								else
+								{
+									_stprintf_s(notifyIconData_.szInfoTitle, TEXT("InputLocker"));
+									_stprintf_s(notifyIconData_.szInfo, TEXT("入力のロックを解除しました"));
+								}
+								Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
+							}
+						}
 
+						if (inputLocked_)
+						{
+							return 1;
+						}
 
-			RegisterGlobalHook(hWnd, [](int nCode, WPARAM wParam, LPARAM lParam)->LRESULT
-				{
-					if (nCode < 0)
-					{
 						return CallNextHookEx(NULL, nCode, wParam, lParam);
-					}
+					}, GlobalHookTypes::LowLevelKeyboard);
 
-					if (inputLocked_)
+
+				RegisterGlobalHook(hWnd, [](int nCode, WPARAM wParam, LPARAM lParam)->LRESULT
 					{
-						return 1;
-					}
+						if (nCode < 0)
+						{
+							return CallNextHookEx(NULL, nCode, wParam, lParam);
+						}
 
-					return CallNextHookEx(NULL, nCode, wParam, lParam);
-				}, GlobalHookTypes::LowLevelMouse);
+						if (inputLocked_)
+						{
+							return 1;
+						}
+
+						return CallNextHookEx(NULL, nCode, wParam, lParam);
+					}, GlobalHookTypes::LowLevelMouse);
+			}
+			else
+			{
+				TCHAR buf[64];
+				_stprintf_s(buf, _countof(buf), TEXT("NotifyIcon error 0x%x"), GetLastError());
+				MessageBox(hWnd, buf, TEXT("Error!!"), MB_OK);
+				DestroyWindow(hWnd);
+			}
 		}
 		break;
     case WM_COMMAND:
@@ -203,8 +253,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
 		UnregisterGlobalHook(hWnd, GlobalHookTypes::LowLevelKeyboard);
 		UnregisterGlobalHook(hWnd, GlobalHookTypes::LowLevelMouse);
+		Shell_NotifyIcon(NIM_DELETE, &notifyIconData_);
         PostQuitMessage(0);
         break;
+	case WM_NOTIFYICON:
+		if (lParam == WM_RBUTTONUP)
+		{
+			POINT curPos;
+			if (GetCursorPos(&curPos) == TRUE)
+			{
+				TrackPopupMenu(GetSubMenu(GetMenu(hWnd), 0), 0, curPos.x, curPos.y, 0, hWnd, nullptr );
+			}
+		}
+		break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
     }

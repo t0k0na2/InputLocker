@@ -43,10 +43,6 @@ EXPORT_API int RegisterGlobalHook(HWND hWnd, HOOKPROC proc, GlobalHookTypes type
 			hookerMap->insert(std::make_pair(hWnd, hHook));
 			result = 0;
 		}
-		else
-		{
-			OutputDebugStringA("gyaaaa!!");
-		}
 	}
 	ReleaseMutex(m);
 	return result;
