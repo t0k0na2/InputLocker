@@ -8,11 +8,12 @@
 
 #include <stdio.h>
 #include <shellapi.h>
+#include <array>
 
 #define MAX_LOADSTRING 100
 
 constexpr UINT WM_NOTIFYICON = WM_APP + 0;
-
+constexpr DWORD BEEP_LENGTH = 300;
 
 
 // グローバル変数:
@@ -22,6 +23,8 @@ WCHAR szWindowClass[MAX_LOADSTRING];            // メイン ウィンドウ ク
 
 bool inputLocked_ = false;
 NOTIFYICONDATA notifyIconData_;
+int beepCounter_ = 0;
+const std::array<DWORD, 8> BEEP_SCALES = {440, 494, 554, 587, 659, 740, 830, 880};
 
 // このコード モジュールに含まれる関数の宣言を転送します:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -183,9 +186,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 						if (inputLocked_)
 						{
-							notifyIconData_.dwInfoFlags = NIIF_WARNING;
-							_stprintf_s(notifyIconData_.szInfo, TEXT("入力はロックされています"));
-							Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
+							if ((param->flags & LLKHF_UP) != 0)
+							{
+								MessageBeep(0xFFFFFFFF);
+							}
 							return 1;
 						}
 
