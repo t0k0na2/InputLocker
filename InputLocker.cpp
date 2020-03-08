@@ -11,16 +11,6 @@
 
 #define MAX_LOADSTRING 100
 
-// {085417EA-F557-4EDF-A600-D696CD832473}
-#if defined(_DEBUG)
-static const GUID APP_GUID =
-{ 0x85417ea, 0xf557, 0x4edf, { 0xa6, 0x0, 0xd6, 0x96, 0xcd, 0x83, 0x24, 0x73 } };
-#else
-// {08C59895-2343-468C-B157-FF183DE7E99F}
-static const GUID APP_GUID =
-{ 0x8c59895, 0x2343, 0x468c, { 0xb1, 0x57, 0xff, 0x18, 0x3d, 0xe7, 0xe9, 0x9f } };
-#endif
-
 constexpr UINT WM_NOTIFYICON = WM_APP + 0;
 
 
@@ -154,10 +144,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			memset(&notifyIconData_, 0, sizeof(notifyIconData_));
 			notifyIconData_.cbSize = sizeof(NOTIFYICONDATA);
 			notifyIconData_.hWnd = hWnd;
-			notifyIconData_.guidItem = APP_GUID;
-			notifyIconData_.uFlags = NIF_ICON | NIF_MESSAGE | NIF_GUID | NIF_TIP;
+			notifyIconData_.uID = 1;
+			notifyIconData_.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
 			notifyIconData_.hIcon = reinterpret_cast<HICON>(GetClassLong(hWnd, GCL_HICON));
 			notifyIconData_.uCallbackMessage = WM_NOTIFYICON;
+			_stprintf_s(notifyIconData_.szInfoTitle, TEXT("InputLocker"));
 			LoadString(cs->hInstance, IDS_APP_TITLE, notifyIconData_.szTip, _countof(notifyIconData_.szTip));
 			if (Shell_NotifyIcon(NIM_ADD, &notifyIconData_) == TRUE)
 			{
@@ -180,12 +171,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 								notifyIconData_.dwInfoFlags = NIIF_INFO;
 								if (inputLocked_)
 								{
-									_stprintf_s(notifyIconData_.szInfoTitle, TEXT("InputLocker"));
 									_stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
 								}
 								else
 								{
-									_stprintf_s(notifyIconData_.szInfoTitle, TEXT("InputLocker"));
 									_stprintf_s(notifyIconData_.szInfo, TEXT("入力のロックを解除しました"));
 								}
 								Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
@@ -194,6 +183,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 						if (inputLocked_)
 						{
+							notifyIconData_.dwInfoFlags = NIIF_WARNING;
+							_stprintf_s(notifyIconData_.szInfo, TEXT("入力はロックされています"));
+							Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
 							return 1;
 						}
 
