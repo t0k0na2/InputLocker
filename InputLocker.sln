@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "InputLocker", "InputLocker.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GlobalHook", "GlobalHook\GlobalHook.vcxproj", "{9774E7C8-C07F-4112-B7DC-41AF21336E17}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Setup", "Setup\Setup.vdproj", "{2AED9C91-4570-4B74-92B7-EEED8799749B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +33,11 @@ Global
 		{9774E7C8-C07F-4112-B7DC-41AF21336E17}.Release|x64.Build.0 = Release|x64
 		{9774E7C8-C07F-4112-B7DC-41AF21336E17}.Release|x86.ActiveCfg = Release|Win32
 		{9774E7C8-C07F-4112-B7DC-41AF21336E17}.Release|x86.Build.0 = Release|Win32
+		{2AED9C91-4570-4B74-92B7-EEED8799749B}.Debug|x64.ActiveCfg = Debug
+		{2AED9C91-4570-4B74-92B7-EEED8799749B}.Debug|x86.ActiveCfg = Debug
+		{2AED9C91-4570-4B74-92B7-EEED8799749B}.Release|x64.ActiveCfg = Release
+		{2AED9C91-4570-4B74-92B7-EEED8799749B}.Release|x86.ActiveCfg = Release
+		{2AED9C91-4570-4B74-92B7-EEED8799749B}.Release|x86.Build.0 = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
