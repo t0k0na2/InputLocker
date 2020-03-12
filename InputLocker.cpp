@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <shellapi.h>
 #include <array>
-
+#include <map>
 #include <stdarg.h>
 
 #define MAX_LOADSTRING 100
@@ -30,7 +30,7 @@ INT_PTR CALLBACK    Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
 namespace {
     constexpr UINT WM_NOTIFYICON = WM_APP + 0;
     constexpr DWORD BEEP_LENGTH = 300;
-    constexpr DWORD NEWEST_SETTINGS_VERSION = 0;
+    constexpr DWORD NEWEST_SETTINGS_VERSION = 1;
 }
 
 namespace {
@@ -40,9 +40,6 @@ namespace {
     HICON hLockIcon_;
     HICON hUnlockIcon_;
     UINT_PTR lockTimerID_ = 1241321;
-    BYTE lockKey_ = VK_END;
-    bool lockKeyWithAlt = true;
-    bool lockKeyWithControl = true;
     bool prevLockState_ = false;
     bool altDown_ = false;
     bool ctrlDown_ = false;
@@ -51,14 +48,12 @@ namespace {
 
     struct SETTINGS
     {
-        bool enableAutoLock;
-        UINT autoLockInterval;
+        bool enableAutoLock = false;
+        UINT autoLockInterval = 10 * 1000;
+        BYTE lockKey = VK_END;
+        bool lockKeyWithAlt = true;
+        bool lockKeyWithControl = true;
 
-        SETTINGS()
-            : enableAutoLock(false)
-            , autoLockInterval(10 * 1000)
-        {
-        }
     }settings_;
 }
 
@@ -98,6 +93,9 @@ namespace {
         RegSetDWord(TEXT("settingsVersion"), NEWEST_SETTINGS_VERSION);
         RegSetDWord(TEXT("enableAutoLock"), settings_.enableAutoLock ? 1 : 0);
         RegSetDWord(TEXT("autoLockInterval"), static_cast<DWORD>(settings_.autoLockInterval));
+        RegSetDWord(TEXT("lockKeyWithAlt"), settings_.lockKeyWithAlt ? 1 : 0);
+        RegSetDWord(TEXT("lockKeyWithControl"), settings_.lockKeyWithControl ? 1 : 0);
+        RegSetDWord(TEXT("lockKey"), static_cast<DWORD>(settings_.lockKey));
     }
 
     void LoadSettings()
@@ -108,6 +106,12 @@ namespace {
             auto version = RegGetDWord(TEXT("settingsVersion"));
             settings_.enableAutoLock = RegGetDWord(TEXT("enableAutoLock")) != 0 ? true : false;
             settings_.autoLockInterval = static_cast<DWORD>(RegGetDWord(TEXT("autoLockInterval")));
+            if (version >= 1)
+            {
+                settings_.lockKeyWithAlt = RegGetDWord(TEXT("lockKeyWithAlt")) != 0 ? true : false;
+                settings_.lockKeyWithControl = RegGetDWord(TEXT("lockKeyWithControl")) != 0 ? true : false;
+                settings_.lockKey = static_cast<BYTE>(RegGetDWord(TEXT("lockKey")));
+            }
         }
     }
 }
@@ -252,14 +256,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                         if (wParam == WM_SYSKEYDOWN)
                         {
                             altDown_ = true;
-                            if(info->vkCode == lockKey_)
+                            if(info->vkCode == settings_.lockKey)
                                 lockKeyDown_ = true;
                             else if(info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
                                 ctrlDown_ = true;
                         }
                         else if (wParam == WM_KEYDOWN)
                         {
-                            if (info->vkCode == lockKey_)
+                            if (info->vkCode == settings_.lockKey)
                                 lockKeyDown_ = true;
                             else if (info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
                                 ctrlDown_ = true;
@@ -268,14 +272,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                         }
                         else if (wParam == WM_SYSKEYUP)
                         {
-                            if (info->vkCode == lockKey_)
+                            if (info->vkCode == settings_.lockKey)
                                 lockKeyDown_ = false;
                             else if (info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
                                 ctrlDown_ = false;
                         }
                         else if (wParam == WM_KEYUP)
                         {
-                            if (info->vkCode == lockKey_)
+                            if (info->vkCode == settings_.lockKey)
                                 lockKeyDown_ = false;
                             else if (info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
                                 ctrlDown_ = false;
@@ -285,7 +289,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
                         //Log(TEXT("alt:%s ctrl:%s key:%s"), altDown_ ? TEXT("o") : TEXT("x"), ctrlDown_ ? TEXT("o") : TEXT("x"), lockKeyDown_ ? TEXT("o") : TEXT("x"));
 
-                        bool nowLockState = (lockKeyWithAlt == false || altDown_) && (lockKeyWithControl == false || ctrlDown_) && lockKeyDown_;
+                        bool nowLockState = (settings_.lockKeyWithAlt == false || altDown_) && (settings_.lockKeyWithControl == false || ctrlDown_) && lockKeyDown_;
                         
                         //if (nowLockState == true && prevLockState_ == false)
                         //    Log(TEXT("lock change!!!"));
@@ -443,6 +447,86 @@ INT_PTR CALLBACK    Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
     {
         SendMessage(GetDlgItem(hDlg, IDC_AUTO_LOCK_CHECK), BM_SETCHECK, settings_.enableAutoLock ? BST_CHECKED : BST_UNCHECKED, 0);
 
+        SendMessage(GetDlgItem(hDlg, IDC_USE_CTRL_KEY_CHECK), BM_SETCHECK, settings_.lockKeyWithControl ? BST_CHECKED : BST_UNCHECKED, 0);
+        SendMessage(GetDlgItem(hDlg, IDC_USE_ALT_KEY_CHECK), BM_SETCHECK, settings_.lockKeyWithAlt ? BST_CHECKED : BST_UNCHECKED, 0);
+
+        auto hKeyCB = GetDlgItem(hDlg, IDC_LOCK_KEY_COMBO);
+        constexpr std::pair<BYTE, LPCTSTR> KEY_MAPS[] = { 
+            {static_cast<BYTE>('A'), TEXT("A")},
+            {static_cast<BYTE>('B'), TEXT("B")},
+            {static_cast<BYTE>('C'), TEXT("C")},
+            {static_cast<BYTE>('D'), TEXT("D")},
+            {static_cast<BYTE>('E'), TEXT("E")},
+            {static_cast<BYTE>('F'), TEXT("F")},
+            {static_cast<BYTE>('G'), TEXT("G")},
+            {static_cast<BYTE>('H'), TEXT("H")},
+            {static_cast<BYTE>('I'), TEXT("I")},
+            {static_cast<BYTE>('J'), TEXT("J")},
+            {static_cast<BYTE>('K'), TEXT("K")},
+            {static_cast<BYTE>('L'), TEXT("L")},
+            {static_cast<BYTE>('M'), TEXT("M")},
+            {static_cast<BYTE>('N'), TEXT("N")},
+            {static_cast<BYTE>('O'), TEXT("O")},
+            {static_cast<BYTE>('P'), TEXT("P")},
+            {static_cast<BYTE>('Q'), TEXT("Q")},
+            {static_cast<BYTE>('R'), TEXT("R")},
+            {static_cast<BYTE>('S'), TEXT("S")},
+            {static_cast<BYTE>('T'), TEXT("T")},
+            {static_cast<BYTE>('U'), TEXT("U")},
+            {static_cast<BYTE>('V'), TEXT("V")},
+            {static_cast<BYTE>('W'), TEXT("W")},
+            {static_cast<BYTE>('X'), TEXT("X")},
+            {static_cast<BYTE>('Y'), TEXT("Y")},
+            {static_cast<BYTE>('Z'), TEXT("Z")},
+            {static_cast<BYTE>('0'), TEXT("0")},
+            {static_cast<BYTE>('1'), TEXT("1")},
+            {static_cast<BYTE>('2'), TEXT("2")},
+            {static_cast<BYTE>('3'), TEXT("3")},
+            {static_cast<BYTE>('4'), TEXT("4")},
+            {static_cast<BYTE>('5'), TEXT("5")},
+            {static_cast<BYTE>('6'), TEXT("6")},
+            {static_cast<BYTE>('7'), TEXT("7")},
+            {static_cast<BYTE>('8'), TEXT("8")},
+            {static_cast<BYTE>('9'), TEXT("9")},
+            {static_cast<BYTE>(VK_F1), TEXT("F1")},
+            {static_cast<BYTE>(VK_F2), TEXT("F2")},
+            {static_cast<BYTE>(VK_F3), TEXT("F3")},
+            {static_cast<BYTE>(VK_F4), TEXT("F4")},
+            {static_cast<BYTE>(VK_F5), TEXT("F5")},
+            {static_cast<BYTE>(VK_F6), TEXT("F6")},
+            {static_cast<BYTE>(VK_F7), TEXT("F7")},
+            {static_cast<BYTE>(VK_F8), TEXT("F8")},
+            {static_cast<BYTE>(VK_F9), TEXT("F9")},
+            {static_cast<BYTE>(VK_F10), TEXT("F10")},
+            {static_cast<BYTE>(VK_F11), TEXT("F11")},
+            {static_cast<BYTE>(VK_F12), TEXT("F12")},
+            {static_cast<BYTE>(VK_SHIFT), TEXT("Shift")},
+            {static_cast<BYTE>(VK_TAB), TEXT("Tab")},
+            {static_cast<BYTE>(VK_SNAPSHOT), TEXT("PrintScreen")},
+            {static_cast<BYTE>(VK_SCROLL), TEXT("ScrollLock")},
+            {static_cast<BYTE>(VK_PAUSE), TEXT("Pause")},
+            {static_cast<BYTE>(VK_INSERT), TEXT("Insert")},
+            {static_cast<BYTE>(VK_HOME), TEXT("Home")},
+            {static_cast<BYTE>(VK_PRIOR), TEXT("PageUp")},
+            {static_cast<BYTE>(VK_NEXT), TEXT("PageDown")},
+            {static_cast<BYTE>(VK_END), TEXT("End")},
+            {static_cast<BYTE>(VK_SPACE), TEXT("Space")},
+            {static_cast<BYTE>(VK_RETURN), TEXT("Enter")},
+            {static_cast<BYTE>(VK_ESCAPE), TEXT("Escape")},
+        };
+
+        for (int i = 0; i < _countof(KEY_MAPS); ++i)
+        {
+            SendMessage(hKeyCB, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(KEY_MAPS[i].second));
+            SendMessage(hKeyCB, CB_SETITEMDATA, i, static_cast<LPARAM>(KEY_MAPS[i].first));
+            if(KEY_MAPS[i].first == settings_.lockKey)
+                SendMessage(hKeyCB, CB_SETCURSEL, i, 0);
+        }
+
+        RECT rc;
+        GetClientRect(hKeyCB, &rc);
+        SetWindowPos(hKeyCB, HWND_TOP, 0, 0, rc.right, (int)SendMessage(hKeyCB, CB_GETITEMHEIGHT, -1, 0) + (int)SendMessage(hKeyCB, CB_GETITEMHEIGHT, 0, 0) * 16, SWP_NOMOVE | SWP_NOZORDER);
+      
         TCHAR buf[128] = {};
         _itot_s(static_cast<int>(settings_.autoLockInterval / 1000), buf, _countof(buf), 10);
         SetWindowText(GetDlgItem(hDlg, IDC_AUTO_LOCK_TIME_EDIT), buf);
@@ -455,6 +539,19 @@ INT_PTR CALLBACK    Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPar
                 settings_.enableAutoLock = true;
             else
                 settings_.enableAutoLock = false;
+
+            if (SendMessage(GetDlgItem(hDlg, IDC_USE_CTRL_KEY_CHECK), BM_GETCHECK, 0, 0) == BST_CHECKED)
+                settings_.lockKeyWithControl = true;
+            else
+                settings_.lockKeyWithControl = false;
+
+            if (SendMessage(GetDlgItem(hDlg, IDC_USE_ALT_KEY_CHECK), BM_GETCHECK, 0, 0) == BST_CHECKED)
+                settings_.lockKeyWithAlt = true;
+            else
+                settings_.lockKeyWithAlt = false;
+
+            auto curKeyIndex = SendMessage(GetDlgItem(hDlg, IDC_LOCK_KEY_COMBO), CB_GETCURSEL, 0, 0);
+            settings_.lockKey = static_cast<BYTE>(SendMessage(GetDlgItem(hDlg, IDC_LOCK_KEY_COMBO), CB_GETITEMDATA, curKeyIndex, 0));
 
             TCHAR buf[128] = {};
             GetWindowText(GetDlgItem(hDlg, IDC_AUTO_LOCK_TIME_EDIT), buf, _countof(buf));

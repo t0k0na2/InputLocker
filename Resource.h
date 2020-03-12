@@ -17,7 +17,10 @@
 #define IDD_SETTINGS_DIALOG             132
 #define IDC_AUTO_LOCK_CHECK             1000
 #define IDC_AUTO_LOCK_TIME_EDIT         1002
-#define IDC_AUTO_LOCK_TIME_SPIN         1003
+#define IDC_USE_CTRL_KEY_CHECK          1004
+#define IDC_USE_ALT_KEY_CHECK           1005
+#define IDC_COMBO1                      1007
+#define IDC_LOCK_KEY_COMBO              1007
 #define ID_32773                        32773
 #define IDM_SETTINGS                    32774
 #define IDC_STATIC                      -1
@@ -29,7 +32,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        133
 #define _APS_NEXT_COMMAND_VALUE         32775
-#define _APS_NEXT_CONTROL_VALUE         1004
+#define _APS_NEXT_CONTROL_VALUE         1008
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif
