@@ -10,10 +10,9 @@
 #include <shellapi.h>
 #include <array>
 
-#define MAX_LOADSTRING 100
+#include <stdarg.h>
 
-constexpr UINT WM_NOTIFYICON = WM_APP + 0;
-constexpr DWORD BEEP_LENGTH = 300;
+#define MAX_LOADSTRING 100
 
 
 // グローバル変数:
@@ -21,16 +20,55 @@ HINSTANCE hInst;                                // 現在のインターフェ�
 WCHAR szTitle[MAX_LOADSTRING];                  // タイトル バーのテキスト
 WCHAR szWindowClass[MAX_LOADSTRING];            // メイン ウィンドウ クラス名
 
-bool inputLocked_ = false;
-NOTIFYICONDATA notifyIconData_;
-HICON hLockIcon_;
-HICON hUnlockIcon_;
-
 // このコード モジュールに含まれる関数の宣言を転送します:
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+
+// 追加分
+
+namespace {
+    constexpr UINT WM_NOTIFYICON = WM_APP + 0;
+    constexpr DWORD BEEP_LENGTH = 300;
+}
+
+namespace {
+    HWND hwnd_;
+    bool inputLocked_ = false;
+    NOTIFYICONDATA notifyIconData_;
+    HICON hLockIcon_;
+    HICON hUnlockIcon_;
+    bool enableLockTimer_ = false;
+    UINT lockTimerInteval_ = 10 * 1000;
+    UINT_PTR lockTimerID_ = 1241321;
+    BYTE lockKey_ = VK_END;
+    bool lockKeyWithAlt = true;
+    bool lockKeyWithControl = true;
+    bool prevLockState_ = false;
+    bool altDown_ = false;
+    bool ctrlDown_ = false;
+    bool lockKeyDown_ = false;
+}
+
+namespace {
+    void Log(LPCTSTR format, ...)
+    {
+        TCHAR buf[128] = {};
+        va_list ap;
+        va_start(ap, format);
+        _vstprintf_s(buf, _countof(buf), format, ap);
+        va_end(ap);
+        OutputDebugString(buf);
+        OutputDebugString(TEXT("\n"));
+    }
+
+    void ResetLockTimer()
+    {
+        if (enableLockTimer_)
+            lockTimerID_ = SetTimer(hwnd_, lockTimerID_, lockTimerInteval_, nullptr);
+    }
+}
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -112,16 +150,16 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
    hInst = hInstance; // グローバル変数にインスタンス ハンドルを格納する
 
-   HWND hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
+   hwnd_ = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
       CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
 
-   if (!hWnd)
+   if (!hwnd_)
    {
       return FALSE;
    }
 
-   ShowWindow(hWnd, SW_HIDE);
-   UpdateWindow(hWnd);
+   ShowWindow(hwnd_, SW_HIDE);
+   UpdateWindow(hwnd_);
 
    return TRUE;
 }
@@ -164,28 +202,70 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 							return CallNextHookEx(NULL, nCode, wParam, lParam);
 						}
 
-						auto param = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+                        auto param = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+                        ResetLockTimer();
 
-						if ((param->vkCode == VK_END) && ((param->flags & LLKHF_UP) != 0))
+                        auto info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+                        //Log(TEXT("%d %d"), wParam, info->vkCode);
+                        if (wParam == WM_SYSKEYDOWN)
+                        {
+                            altDown_ = true;
+                            if(info->vkCode == lockKey_)
+                                lockKeyDown_ = true;
+                            else if(info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
+                                ctrlDown_ = true;
+                        }
+                        else if (wParam == WM_KEYDOWN)
+                        {
+                            if (info->vkCode == lockKey_)
+                                lockKeyDown_ = true;
+                            else if (info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
+                                ctrlDown_ = true;
+                            else if (info->vkCode == VK_LMENU || info->vkCode == VK_RMENU)
+                                altDown_ = true;
+                        }
+                        else if (wParam == WM_SYSKEYUP)
+                        {
+                            if (info->vkCode == lockKey_)
+                                lockKeyDown_ = false;
+                            else if (info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
+                                ctrlDown_ = false;
+                        }
+                        else if (wParam == WM_KEYUP)
+                        {
+                            if (info->vkCode == lockKey_)
+                                lockKeyDown_ = false;
+                            else if (info->vkCode == VK_LCONTROL || info->vkCode == VK_RCONTROL)
+                                ctrlDown_ = false;
+                            else if (info->vkCode == VK_LMENU || info->vkCode == VK_RMENU)
+                                altDown_ = false;
+                        }
+
+                        //Log(TEXT("alt:%s ctrl:%s key:%s"), altDown_ ? TEXT("o") : TEXT("x"), ctrlDown_ ? TEXT("o") : TEXT("x"), lockKeyDown_ ? TEXT("o") : TEXT("x"));
+
+                        bool nowLockState = (lockKeyWithAlt == false || altDown_) && (lockKeyWithControl == false || ctrlDown_) && lockKeyDown_;
+                        
+                        //if (nowLockState == true && prevLockState_ == false)
+                        //    Log(TEXT("lock change!!!"));
+
+                        if(nowLockState == true && prevLockState_ == false)
 						{
-							if (GetKeyState(VK_CONTROL) != 0 && GetKeyState(VK_END) != 0 && (GetKeyState(VK_MENU) != 0))
+							inputLocked_ = !inputLocked_;
+							notifyIconData_.uFlags |= NIF_INFO;
+							notifyIconData_.dwInfoFlags = NIIF_INFO;
+							if (inputLocked_)
 							{
-								inputLocked_ = !inputLocked_;
-								notifyIconData_.uFlags |= NIF_INFO;
-								notifyIconData_.dwInfoFlags = NIIF_INFO;
-								if (inputLocked_)
-								{
-									notifyIconData_.hIcon = hLockIcon_;
-									_stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
-								}
-								else
-								{
-									notifyIconData_.hIcon = hUnlockIcon_;
-									_stprintf_s(notifyIconData_.szInfo, TEXT("入力のロックを解除しました"));
-								}
-								Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
+								notifyIconData_.hIcon = hLockIcon_;
+								_stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
 							}
+							else
+							{
+								notifyIconData_.hIcon = hUnlockIcon_;
+								_stprintf_s(notifyIconData_.szInfo, TEXT("入力のロックを解除しました"));
+							}
+							Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
 						}
+                        prevLockState_ = nowLockState;
 
 						if (inputLocked_)
 						{
@@ -207,6 +287,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 							return CallNextHookEx(NULL, nCode, wParam, lParam);
 						}
 
+                        ResetLockTimer();
+
 						if (inputLocked_)
 						{
 							return 1;
@@ -214,6 +296,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 						return CallNextHookEx(NULL, nCode, wParam, lParam);
 					}, GlobalHookTypes::LowLevelMouse);
+
+
+                ResetLockTimer();
 			}
 			else
 			{
@@ -247,6 +332,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             HDC hdc = BeginPaint(hWnd, &ps);
             // TODO: HDC を使用する描画コードをここに追加してください...
             EndPaint(hWnd, &ps);
+        }
+        break;
+    case WM_TIMER:
+        if (inputLocked_ == false)
+        {
+            inputLocked_ = true;
+            notifyIconData_.uFlags |= NIF_INFO;
+            notifyIconData_.dwInfoFlags = NIIF_INFO;
+            notifyIconData_.hIcon = hLockIcon_;
+            _stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
+            Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
         }
         break;
     case WM_DESTROY:
