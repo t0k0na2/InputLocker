@@ -48,5 +48,8 @@
     <Image Include="lock.ico">
       <Filter>リソース ファイル</Filter>
     </Image>
+    <Image Include="unlock.ico">
+      <Filter>リソース ファイル</Filter>
+    </Image>
   </ItemGroup>
 </Project>

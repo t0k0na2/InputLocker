@@ -25,12 +25,12 @@ ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
-
-// 追加分
+INT_PTR CALLBACK    Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
 
 namespace {
     constexpr UINT WM_NOTIFYICON = WM_APP + 0;
     constexpr DWORD BEEP_LENGTH = 300;
+    constexpr DWORD NEWEST_SETTINGS_VERSION = 0;
 }
 
 namespace {
@@ -39,8 +39,6 @@ namespace {
     NOTIFYICONDATA notifyIconData_;
     HICON hLockIcon_;
     HICON hUnlockIcon_;
-    bool enableLockTimer_ = false;
-    UINT lockTimerInteval_ = 10 * 1000;
     UINT_PTR lockTimerID_ = 1241321;
     BYTE lockKey_ = VK_END;
     bool lockKeyWithAlt = true;
@@ -49,6 +47,19 @@ namespace {
     bool altDown_ = false;
     bool ctrlDown_ = false;
     bool lockKeyDown_ = false;
+
+
+    struct SETTINGS
+    {
+        bool enableAutoLock;
+        UINT autoLockInterval;
+
+        SETTINGS()
+            : enableAutoLock(false)
+            , autoLockInterval(10 * 1000)
+        {
+        }
+    }settings_;
 }
 
 namespace {
@@ -63,10 +74,41 @@ namespace {
         OutputDebugString(TEXT("\n"));
     }
 
-    void ResetLockTimer()
+    void ResetAutoLockTimer()
     {
-        if (enableLockTimer_)
-            lockTimerID_ = SetTimer(hwnd_, lockTimerID_, lockTimerInteval_, nullptr);
+        if (settings_.enableAutoLock)
+            lockTimerID_ = SetTimer(hwnd_, lockTimerID_, settings_.autoLockInterval, nullptr);
+    }
+
+    DWORD RegGetDWord(LPCTSTR key)
+    {
+        DWORD value = 0;
+        DWORD size = sizeof(DWORD);
+        RegGetValue(HKEY_CURRENT_USER, TEXT("Software\\InputLocker"), key, RRF_RT_REG_DWORD, nullptr, &value, &size);
+        return value;
+    }
+
+    void RegSetDWord(LPCTSTR key, DWORD value)
+    {
+        RegSetKeyValue(HKEY_CURRENT_USER, TEXT("Software\\InputLocker"), key, RRF_RT_REG_DWORD, &value, sizeof(value));
+    }
+
+    void SaveSettings()
+    {
+        RegSetDWord(TEXT("settingsVersion"), NEWEST_SETTINGS_VERSION);
+        RegSetDWord(TEXT("enableAutoLock"), settings_.enableAutoLock ? 1 : 0);
+        RegSetDWord(TEXT("autoLockInterval"), static_cast<DWORD>(settings_.autoLockInterval));
+    }
+
+    void LoadSettings()
+    {
+        HKEY key;
+        if (RegOpenKeyEx(HKEY_CURRENT_USER, TEXT("Software\\InputLocker"), 0, KEY_QUERY_VALUE, &key) == ERROR_SUCCESS)
+        {
+            auto version = RegGetDWord(TEXT("settingsVersion"));
+            settings_.enableAutoLock = RegGetDWord(TEXT("enableAutoLock")) != 0 ? true : false;
+            settings_.autoLockInterval = static_cast<DWORD>(RegGetDWord(TEXT("autoLockInterval")));
+        }
     }
 }
 
@@ -203,7 +245,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 						}
 
                         auto param = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
-                        ResetLockTimer();
+                        ResetAutoLockTimer();
 
                         auto info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
                         //Log(TEXT("%d %d"), wParam, info->vkCode);
@@ -287,7 +329,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 							return CallNextHookEx(NULL, nCode, wParam, lParam);
 						}
 
-                        ResetLockTimer();
+                        ResetAutoLockTimer();
 
 						if (inputLocked_)
 						{
@@ -298,7 +340,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 					}, GlobalHookTypes::LowLevelMouse);
 
 
-                ResetLockTimer();
+                ResetAutoLockTimer();
+
+                LoadSettings();
 			}
 			else
 			{
@@ -317,6 +361,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             {
             case IDM_ABOUT:
                 DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
+                break;
+            case IDM_SETTINGS:
+                DialogBox(hInst, MAKEINTRESOURCE(IDD_SETTINGS_DIALOG), hWnd, Settings);
                 break;
             case IDM_EXIT:
                 DestroyWindow(hWnd);
@@ -378,6 +425,47 @@ INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
     case WM_COMMAND:
         if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+        {
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
+INT_PTR CALLBACK    Settings(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+    case WM_INITDIALOG:
+    {
+        SendMessage(GetDlgItem(hDlg, IDC_AUTO_LOCK_CHECK), BM_SETCHECK, settings_.enableAutoLock ? BST_CHECKED : BST_UNCHECKED, 0);
+
+        TCHAR buf[128] = {};
+        _itot_s(static_cast<int>(settings_.autoLockInterval / 1000), buf, _countof(buf), 10);
+        SetWindowText(GetDlgItem(hDlg, IDC_AUTO_LOCK_TIME_EDIT), buf);
+        return (INT_PTR)TRUE;
+    }
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK)
+        {
+            if(SendMessage(GetDlgItem(hDlg, IDC_AUTO_LOCK_CHECK), BM_GETCHECK, 0, 0) == BST_CHECKED)
+                settings_.enableAutoLock = true;
+            else
+                settings_.enableAutoLock = false;
+
+            TCHAR buf[128] = {};
+            GetWindowText(GetDlgItem(hDlg, IDC_AUTO_LOCK_TIME_EDIT), buf, _countof(buf));
+            settings_.autoLockInterval = static_cast<DWORD>(_ttoi(buf)) * 1000;
+
+            SaveSettings();
+            ResetAutoLockTimer();
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+        else if (LOWORD(wParam) == IDCANCEL)
         {
             EndDialog(hDlg, LOWORD(wParam));
             return (INT_PTR)TRUE;

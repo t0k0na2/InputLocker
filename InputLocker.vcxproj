@@ -167,6 +167,7 @@
     <Image Include="InputLocker.ico" />
     <Image Include="lock.ico" />
     <Image Include="small.ico" />
+    <Image Include="unlock.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="GlobalHook\GlobalHook.vcxproj">

@@ -50,6 +50,7 @@ IDC_INPUTLOCKER MENU
 BEGIN
     POPUP "ファイル(&F)"
     BEGIN
+        MENUITEM "設定",                          IDM_SETTINGS
         MENUITEM "終了する(&X)",                    IDM_EXIT
         MENUITEM SEPARATOR
         MENUITEM "バージョン情報(&A)...",              IDM_ABOUT
@@ -89,6 +90,20 @@ BEGIN
     DEFPUSHBUTTON   "OK",IDOK,113,41,50,14,WS_GROUP
 END
 
+IDD_SETTINGS_DIALOG DIALOGEX 0, 0, 309, 176
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "設定"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    DEFPUSHBUTTON   "OK",IDOK,198,155,50,14
+    PUSHBUTTON      "キャンセル",IDCANCEL,252,155,50,14
+    GROUPBOX        "自動ロック",IDC_STATIC,7,7,132,44
+    CONTROL         "有効",IDC_AUTO_LOCK_CHECK,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,13,18,32,10
+    EDITTEXT        IDC_AUTO_LOCK_TIME_EDIT,80,28,46,14,ES_AUTOHSCROLL | ES_NUMBER,WS_EX_RIGHT
+    CONTROL         "",IDC_AUTO_LOCK_TIME_SPIN,"msctls_updown32",UDS_ARROWKEYS,126,28,10,14
+    LTEXT           "ロックまでの時間(秒)",IDC_STATIC,13,31,66,8
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -104,6 +119,14 @@ BEGIN
         RIGHTMARGIN, 163
         TOPMARGIN, 7
         BOTTOMMARGIN, 55
+    END
+
+    IDD_SETTINGS_DIALOG, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 302
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 169
     END
 END
 #endif    // APSTUDIO_INVOKED
