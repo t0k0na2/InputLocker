@@ -8,6 +8,10 @@
 #define WIN32_LEAN_AND_MEAN             // Windows ヘッダーからほとんど使用されていない部分を除外する
 // Windows ヘッダー ファイル
 #include <windows.h>
+#include <powerbase.h>
+#include <powrprof.h>
+#include <wtsapi32.h>
+
 // C ランタイム ヘッダー ファイル
 #include <stdlib.h>
 #include <malloc.h>

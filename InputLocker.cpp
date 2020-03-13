@@ -36,6 +36,7 @@ namespace {
 namespace {
     HWND hwnd_;
     bool inputLocked_ = false;
+    bool isAppInvalid_ = false;
     NOTIFYICONDATA notifyIconData_;
     HICON hLockIcon_;
     HICON hUnlockIcon_;
@@ -44,7 +45,7 @@ namespace {
     bool altDown_ = false;
     bool ctrlDown_ = false;
     bool lockKeyDown_ = false;
-
+    HPOWERNOTIFY hPowerNotify_ = nullptr;
 
     struct SETTINGS
     {
@@ -294,7 +295,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                         //if (nowLockState == true && prevLockState_ == false)
                         //    Log(TEXT("lock change!!!"));
 
-                        if(nowLockState == true && prevLockState_ == false)
+                        if(nowLockState == true && prevLockState_ == false && isAppInvalid_ == false)
 						{
 							inputLocked_ = !inputLocked_;
 							notifyIconData_.uFlags |= NIF_INFO;
@@ -343,6 +344,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 						return CallNextHookEx(NULL, nCode, wParam, lParam);
 					}, GlobalHookTypes::LowLevelMouse);
 
+                DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS dnsp = {};
+                dnsp.Callback = [](PVOID Context, ULONG Type, PVOID Setting)->ULONG {
+                    if (Type == PBT_APMSUSPEND)
+                    {
+                        isAppInvalid_ = true;
+                        inputLocked_ = false;
+                        //Log(TEXT("PBT_APMSUSPEND"));
+                    }
+                    else if (Type == PBT_APMRESUMESUSPEND)
+                    {
+                        isAppInvalid_ = false;
+                        //Log(TEXT("PBT_APMRESUMESUSPEND"));
+                    }
+                    return 0;
+                };
+                dnsp.Context = nullptr;
+                PowerRegisterSuspendResumeNotification(DEVICE_NOTIFY_CALLBACK, reinterpret_cast<HANDLE>(&dnsp), &hPowerNotify_);
+
+                WTSRegisterSessionNotification(hWnd, NOTIFY_FOR_THIS_SESSION);
 
                 ResetAutoLockTimer();
 
@@ -386,7 +406,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_TIMER:
-        if (inputLocked_ == false)
+        if (inputLocked_ == false && isAppInvalid_ == false)
         {
             inputLocked_ = true;
             notifyIconData_.uFlags |= NIF_INFO;
@@ -399,6 +419,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_DESTROY:
 		UnregisterGlobalHook(hWnd, GlobalHookTypes::LowLevelKeyboard);
 		UnregisterGlobalHook(hWnd, GlobalHookTypes::LowLevelMouse);
+        PowerUnregisterSuspendResumeNotification(hPowerNotify_);
+        WTSUnRegisterSessionNotification(hWnd);
 		Shell_NotifyIcon(NIM_DELETE, &notifyIconData_);
         PostQuitMessage(0);
         break;
@@ -412,6 +434,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			}
 		}
 		break;
+    case WM_WTSSESSION_CHANGE:
+        if (wParam == WTS_SESSION_LOCK)
+        {
+            isAppInvalid_ = true;
+            inputLocked_ = false;
+            //Log(TEXT("WTS_SESSION_LOCK"));
+        }
+        else if (wParam == WTS_SESSION_UNLOCK)
+        {
+            isAppInvalid_ = false;
+            //Log(TEXT("WTS_SESSION_UNLOCK"));
+        }
+        break;
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
