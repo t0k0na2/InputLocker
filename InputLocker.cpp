@@ -249,7 +249,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 							return CallNextHookEx(NULL, nCode, wParam, lParam);
 						}
 
-                        auto param = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
                         ResetAutoLockTimer();
 
                         auto info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
@@ -316,7 +315,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 						if (inputLocked_)
 						{
-							if ((param->flags & LLKHF_UP) != 0)
+							if ((info->flags & LLKHF_UP) != 0)
 							{
 								MessageBeep(0xFFFFFFFF);
 							}
@@ -406,7 +405,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_TIMER:
-        if (inputLocked_ == false && isAppInvalid_ == false)
+        if (inputLocked_ == false && isAppInvalid_ == false && settings_.enableAutoLock)
         {
             inputLocked_ = true;
             notifyIconData_.uFlags |= NIF_INFO;
@@ -414,6 +413,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             notifyIconData_.hIcon = hLockIcon_;
             _stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
             Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
+            KillTimer(hWnd, lockTimerID_);
         }
         break;
     case WM_DESTROY:
