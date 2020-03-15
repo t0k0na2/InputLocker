@@ -52,6 +52,7 @@ namespace {
     bool altDown_ = false;
     bool ctrlDown_ = false;
     bool lockKeyDown_ = false;
+    bool prevLockKeyDown_ = false;
     HPOWERNOTIFY hPowerNotify_ = nullptr;
 
     struct SETTINGS
@@ -296,7 +297,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
                         //Log(TEXT("alt:%s ctrl:%s key:%s"), altDown_ ? TEXT("o") : TEXT("x"), ctrlDown_ ? TEXT("o") : TEXT("x"), lockKeyDown_ ? TEXT("o") : TEXT("x"));
 
-                        bool nowLockState = (settings_.lockKeyWithAlt == false || altDown_) && (settings_.lockKeyWithControl == false || ctrlDown_) && lockKeyDown_;
+                        bool nowLockState = (settings_.lockKeyWithAlt == false || altDown_) && (settings_.lockKeyWithControl == false || ctrlDown_) && (lockKeyDown_ == false && prevLockKeyDown_ == true);
                         
                         //if (nowLockState == true && prevLockState_ == false)
                         //    Log(TEXT("lock change!!!"));
@@ -318,6 +319,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 							}
 							Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
 						}
+                        prevLockKeyDown_ = lockKeyDown_;
                         prevLockState_ = nowLockState;
 
 						if (inputLocked_)
