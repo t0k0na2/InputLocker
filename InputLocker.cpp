@@ -43,6 +43,7 @@ namespace {
 namespace {
     HWND hwnd_;
     bool inputLocked_ = false;
+    bool inputting_ = false;
     bool isAppInvalid_ = false;
     NOTIFYICONDATA notifyIconData_;
     HICON hLockIcon_;
@@ -296,28 +297,42 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                         }
 
                         //Log(TEXT("alt:%s ctrl:%s key:%s"), altDown_ ? TEXT("o") : TEXT("x"), ctrlDown_ ? TEXT("o") : TEXT("x"), lockKeyDown_ ? TEXT("o") : TEXT("x"));
+                        bool nowLockState = false;
 
-                        bool nowLockState = (settings_.lockKeyWithAlt == false || altDown_) && (settings_.lockKeyWithControl == false || ctrlDown_) && (lockKeyDown_ == false && prevLockKeyDown_ == true);
-                        
+                        if (inputting_)
+                        {
+                            if((settings_.lockKeyWithAlt == false || altDown_ == false) && (settings_.lockKeyWithControl == false || ctrlDown_ == false) && lockKeyDown_ == false)
+                                inputting_ = false;
+                        }
+                        else if (inputLocked_ == false)
+                        {
+                            nowLockState = (settings_.lockKeyWithAlt == false || altDown_) && (settings_.lockKeyWithControl == false || ctrlDown_) && (lockKeyDown_ == true && prevLockKeyDown_ == false);
+                        }
+                        else
+                        {
+                            nowLockState = (settings_.lockKeyWithAlt == false || altDown_) && (settings_.lockKeyWithControl == false || ctrlDown_) && (lockKeyDown_ == false && prevLockKeyDown_ == true);
+                        }
+
                         //if (nowLockState == true && prevLockState_ == false)
                         //    Log(TEXT("lock change!!!"));
 
                         if(nowLockState == true && prevLockState_ == false && isAppInvalid_ == false)
 						{
-							inputLocked_ = !inputLocked_;
+                            inputting_ = true;
+                            inputLocked_ = !inputLocked_;
 							notifyIconData_.uFlags |= NIF_INFO;
 							notifyIconData_.dwInfoFlags = NIIF_INFO;
 							if (inputLocked_)
 							{
-								notifyIconData_.hIcon = hLockIcon_;
+                                notifyIconData_.hIcon = hLockIcon_;
 								_stprintf_s(notifyIconData_.szInfo, TEXT("入力をロックしました"));
 							}
 							else
 							{
-								notifyIconData_.hIcon = hUnlockIcon_;
-								_stprintf_s(notifyIconData_.szInfo, TEXT("入力のロックを解除しました"));
+                                notifyIconData_.hIcon = hUnlockIcon_;
+                                _stprintf_s(notifyIconData_.szInfo, TEXT("入力のロックを解除しました"));
 							}
-							Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
+                            Shell_NotifyIcon(NIM_MODIFY, &notifyIconData_);
 						}
                         prevLockKeyDown_ = lockKeyDown_;
                         prevLockState_ = nowLockState;
